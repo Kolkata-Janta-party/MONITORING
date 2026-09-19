@@ -55,7 +55,7 @@ jobs:
           const browser = await chromium.launch({headless:true});
           const page = await browser.newPage();
           const errors = [];
-          page.on("pageerror", e => errors.push(String(e)));
+          page.on("pageerror", e => errors.push(page.url()+" :: "+String(e.stack||e)));
           await page.goto("http://127.0.0.1:8080/", {waitUntil:"networkidle"});
           if (!(await page.locator("h1").count())) throw new Error("Home heading missing");
           await page.goto("http://127.0.0.1:8080/operator.html", {waitUntil:"networkidle"});
