@@ -11,12 +11,13 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: monitoring-pages
   cancel-in-progress: true
 
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v6
