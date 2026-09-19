@@ -1,51 +1,101 @@
 # MONITORING
 
-A privacy-conscious, client-side service observability dashboard for availability, latency, incidents, and operational events.
+A production-oriented service observability dashboard with server-side scheduled health checks, persistent history, incident management, latency analytics, deployment records, maintenance windows, alerts, and an authenticated operator console.
 
-## What it does
+## Architecture
+- Frontend: static GitHub Pages dashboard.
+- API: Supabase Edge Function (monitor-api-final).
+- Scheduler/worker: Supabase Edge Function (monitor-worker-v5) invoked every minute by pg_cron + pg_net.
+- Database: PostgreSQL tables for monitors, checks, incidents, maintenance, deployments, alert channels/rules, delivery history, operator access, and rate limits.
+- Authentication: Supabase Auth for operator access.
+- Retention: daily cleanup keeps check history for 90 days, alert deliveries for 180 days, and deployments for 365 days.
 
-- Monitors configurable **HTTPS endpoints directly from the browser**.
-- Measures request latency and HTTP success/failure.
-- Tracks a session availability ratio, latency history, and open incidents.
-- Stores configuration and results in browser `localStorage`.
-- Includes demo services, filtering, endpoint add/remove, automatic 60-second checks, incident creation/resolution, a 404 page, PWA support, and an offline app shell.
+The dashboard no longer depends on a browser tab being open for health checks.
 
-### Important limitation
+## Monitoring
+Each monitor supports:
+- HTTP/HTTPS URL validation
+- GET or HEAD
+- 30 seconds–24 hours interval
+- 1–30 second timeout
+- expected HTTP status range
+- configurable consecutive failure threshold
+- configurable recovery threshold
+- enable/disable state
+- tags
+- server-side latency and response-code history
+- regional check metadata
 
-Because this project is hosted as a static GitHub Pages site, checks run in the visitor's browser rather than on a server. A target must allow browser cross-origin requests (CORS) for live checks to work. This is **not a server-side uptime monitor** and it must not be used to monitor private endpoints or to store credentials.
+The worker records every result and updates the monitor current state.
 
-## Privacy and security
+### SSRF protection
+The worker validates monitor targets before making requests. It blocks localhost/internal hostnames, embedded URL credentials, non-HTTP(S) schemes, non-standard ports, private/loopback/link-local/multicast/reserved IP ranges, and hostnames resolving to blocked private addresses.
 
-No analytics or advertising scripts are included. Endpoint configuration, health results, and session history remain in browser `localStorage`. Do not enter passwords, API keys, cookies, tokens, or other secrets into the dashboard.
+## Incidents
+Incidents automatically progress through: **open → investigating → resolved**.
 
-The site includes a restrictive Content Security Policy meta tag and HTTPS-only custom endpoints. GitHub Pages controls actual HTTP response headers, so server-side security headers cannot be configured from this repository alone.
+The system records first failure, incident start, investigation, recovery, resolution, failure/recovery counts, duration, and failure reason.
 
-See [Privacy](privacy.html).
+An incident opens only after the configured consecutive-failure threshold is reached. Recovery requires the configured consecutive successful checks.
+
+Scheduled maintenance is recorded separately and does not count as an outage.
+
+## Analytics
+Supported history windows: 1 hour, 6 hours, 24 hours, 7 days, and 30 days.
+
+The API calculates uptime percentage, p50 latency, p95 latency, p99 latency, response-code breakdown, and outage timeline.
+
+## Alerts
+Alert rules support webhook notifications, optional email notifications through a server-side Resend provider, incident-opened triggers, recovery triggers, per-rule consecutive-failure thresholds, monitor-specific or all-monitor rules, and delivery history.
+
+## Operator console
+Open operator.html to create/edit/delete monitors, configure intervals and thresholds, manage incidents, schedule/delete maintenance windows, manage alert channels/rules, record deployment events, and sign out.
+
+The operator API requires an authenticated Supabase session. Database service credentials and worker tokens remain server-side.
+
+## Security
+- strict API CORS origin
+- authentication on operator mutations
+- server-side secrets
+- rate limiting
+- URL/input validation
+- security response headers
+- SSRF protections
+- database RLS
+- restricted service-role access
+- automated JavaScript syntax checks
+- browser smoke tests
+- production browser verification
+- retention cleanup
+
+Do not put passwords, API keys, cookies, access tokens, or credentials in monitor URLs.
+
+## Privacy
+The public dashboard does not include advertising or analytics trackers. Operational data is stored in the monitoring PostgreSQL database. See Privacy.
 
 ## Run locally
-
 ```bash
 python3 -m http.server 8080
 ```
 
-Open `http://localhost:8080/`.
+The static UI can be previewed locally, but the production monitoring API is hosted separately.
 
 ## Structure
-
-- `index.html` — dashboard and endpoint controls
-- `styles.css` — responsive UI
-- `app.js` — monitoring engine, incidents, persistence, and chart
-- `service.html` — shareable service-detail view
-- `404.html` — not-found page
-- `manifest.webmanifest` / `sw.js` — PWA/offline shell
-- `privacy.html` — privacy and data-handling information
-- `robots.txt` / `sitemap.xml` — crawler metadata
-- `.github/workflows/pages.yml` — GitHub Pages deployment and smoke test
+- index.html — public observability dashboard
+- styles.css — responsive UI
+- app.js — public dashboard/API integration and analytics rendering
+- operator.html / operator.js — authenticated operator console
+- service.html / service-detail.js — per-service historical analytics
+- privacy.html — privacy and data handling
+- manifest.webmanifest / sw.js — PWA shell
+- 404.html — not-found page
+- .github/workflows/pages.yml — CI, browser QA, deployment, and production verification
+- supabase/migrations/ — reproducible database schema
 
 ## Deployment
+GitHub Pages deploys the static frontend from main. CI performs required-file validation, JavaScript syntax checks, manifest validation, local HTTP checks, headless Chromium smoke tests, GitHub Pages deployment, and production browser verification.
 
-The Pages workflow runs on pushes to `main`, validates the static site locally with a smoke test, then deploys the artifact to GitHub Pages.
+The monitoring backend is deployed separately to Supabase and scheduled independently of GitHub Pages.
 
 ## Scope
-
-This project is for technical/system observability. It does not perform individual profiling, political persuasion, voter targeting, or person-level political monitoring.
+This project is for technical/system observability only. It does not perform individual profiling, political persuasion, voter targeting, or person-level political monitoring.
