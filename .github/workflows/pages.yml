@@ -29,6 +29,7 @@ jobs:
           test -s manifest.webmanifest
           test -s sw.js
           test -s service.html
+          test -s service-detail.js
           test -s privacy.html
           test -s 404.html
           python3 - <<'PY'
