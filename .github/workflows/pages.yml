@@ -68,6 +68,10 @@ jobs:
       - name: Local HTTP checks
         run: |
           set -e
+          python3 -m http.server 8080 >/tmp/monitoring-http-check.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          sleep 2
           curl --fail --silent --show-error http://127.0.0.1:8080/ >/tmp/index.out
           curl --fail --silent --show-error http://127.0.0.1:8080/manifest.webmanifest >/dev/null
           curl --fail --silent --show-error http://127.0.0.1:8080/service.html >/dev/null
