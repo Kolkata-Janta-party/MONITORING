@@ -1,54 +1,36 @@
-const services=[
-  ["API Gateway","182 ms","99.99%"],["Web Dashboard","96 ms","100%"],["Data Pipeline","241 ms","99.97%"],
-  ["Notification Worker","118 ms","99.99%"],["Database","14 ms","99.999%"],["Object Storage","73 ms","99.98%"]
-];
-const events=[
-  ["Health check completed","All endpoints responding normally","2 min ago"],
-  ["Deployment completed","Web Dashboard · v2.8.1","11 min ago"],
-  ["Latency recovered","API Gateway returned below threshold","24 min ago"],
-  ["Scheduled check","Database backup verification passed","41 min ago"]
-];
-
-const servicesEl=document.querySelector("#services");
-const eventsEl=document.querySelector("#events");
-const canvas=document.querySelector("#latencyChart");
-const refreshBtn=document.querySelector("#refreshBtn");
-const updatedAt=document.querySelector("#updatedAt");
-
-const escapeHtml=(value)=>String(value).replace(/[&<>"']/g,(char)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
-
-function render(){
-  servicesEl.innerHTML=services.map(([name,latency,availability])=>`<div class="service"><div class="service-name"><i class="health" aria-hidden="true"></i>${escapeHtml(name)}</div><div class="service-meta"><span><b>${escapeHtml(latency)}</b></span><span><b>${escapeHtml(availability)}</b></span></div></div>`).join("");
-  eventsEl.innerHTML=events.map(([title,detail,time])=>`<div class="event"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span><span>${escapeHtml(time)}</span></div>`).join("");
-}
-
-function drawChart(){
-  if(!canvas)return;
-  const dpr=Math.max(1,window.devicePixelRatio||1);
-  const rect=canvas.getBoundingClientRect();
-  const w=Math.max(1,rect.width),h=Math.max(1,rect.height);
-  canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
-  const c=canvas.getContext("2d");
-  c.setTransform(dpr,0,0,dpr,0,0);
-  const pts=Array.from({length:61},(_,i)=>174+Math.sin(i*.31)*18+Math.sin(i*.79)*7+(i>44?Math.sin(i*.5)*4:0));
-  const min=130,max=235,left=2,right=Math.max(2,w-2),top=15,bottom=Math.max(top+1,h-15);
-  const x=i=>left+(right-left)*i/60,y=v=>bottom-(v-min)/(max-min)*(bottom-top);
-  c.clearRect(0,0,w,h);
-  c.strokeStyle="rgba(148,163,184,.08)";c.lineWidth=1;
-  for(let i=0;i<4;i++){const yy=top+(bottom-top)*i/3;c.beginPath();c.moveTo(left,yy);c.lineTo(right,yy);c.stroke();}
-  const g=c.createLinearGradient(0,0,0,h);g.addColorStop(0,"rgba(120,167,255,.18)");g.addColorStop(1,"rgba(120,167,255,0)");
-  c.beginPath();pts.forEach((v,i)=>i?c.lineTo(x(i),y(v)):c.moveTo(x(i),y(v)));c.lineTo(right,bottom);c.lineTo(left,bottom);c.closePath();c.fillStyle=g;c.fill();
-  c.beginPath();pts.forEach((v,i)=>i?c.lineTo(x(i),y(v)):c.moveTo(x(i),y(v)));c.strokeStyle="#78a7ff";c.lineWidth=2;c.stroke();
-}
-
-function refresh(){
-  updatedAt.textContent="Updated just now";
-  refreshBtn.setAttribute("aria-busy","true");
-  drawChart();
-  window.setTimeout(()=>refreshBtn.removeAttribute("aria-busy"),180);
-}
-
-render();
-refreshBtn.addEventListener("click",refresh);
-window.addEventListener("resize",drawChart,{passive:true});
-drawChart();
+const DEMO_SERVICES=[
+{id:"api-gateway",name:"API Gateway",url:"https://example.com/health",latency:182,availability:99.99,mode:"demo"},
+{id:"web-dashboard",name:"Web Dashboard",url:"https://example.com/",latency:96,availability:100,mode:"demo"},
+{id:"data-pipeline",name:"Data Pipeline",url:"https://example.com/pipeline",latency:241,availability:99.97,mode:"demo"},
+{id:"notification-worker",name:"Notification Worker",url:"https://example.com/notify",latency:118,availability:99.99,mode:"demo"},
+{id:"database",name:"Database",url:"https://example.com/db",latency:14,availability:99.999,mode:"demo"},
+{id:"object-storage",name:"Object Storage",url:"https://example.com/storage",latency:73,availability:99.98,mode:"demo"}];
+const KEY="monitoring-services-v2",STATE="monitoring-state-v2";
+const els={services:document.querySelector("#services"),events:document.querySelector("#events"),incidents:document.querySelector("#incidentsList"),emptyServices:document.querySelector("#emptyServices"),emptyEvents:document.querySelector("#emptyEvents"),emptyIncidents:document.querySelector("#emptyIncidents"),serviceMeta:document.querySelector("#serviceMeta"),incidentMeta:document.querySelector("#incidentMeta"),serviceCount:document.querySelector("#serviceCount"),availability:document.querySelector("#availability"),p95:document.querySelector("#p95"),incidentCount:document.querySelector("#incidentCount"),chartP95:document.querySelector("#chartP95"),updatedAt:document.querySelector("#updatedAt"),statusCard:document.querySelector("#overallStatus"),statusText:document.querySelector("#overallStatusText"),canvas:document.querySelector("#latencyChart"),toast:document.querySelector("#toast")};
+let services=loadServices(),saved=loadState(),events=saved.events||[],incidents=saved.incidents||[],history=saved.history||[];
+function loadServices(){try{return JSON.parse(localStorage.getItem(KEY))||DEMO_SERVICES.map(s=>({...s}))}catch{return DEMO_SERVICES.map(s=>({...s}))}}
+function loadState(){try{return JSON.parse(localStorage.getItem(STATE))||{}}catch{return {}}}
+function save(){localStorage.setItem(KEY,JSON.stringify(services));localStorage.setItem(STATE,JSON.stringify({events,incidents,history}))}
+const esc=v=>String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clock=()=>new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+function toast(m){els.toast.textContent=m;els.toast.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>els.toast.classList.remove("show"),2600)}
+function renderServices(){const q=document.querySelector("#serviceFilter").value.trim().toLowerCase(),visible=services.filter(s=>s.name.toLowerCase().includes(q));els.serviceMeta.textContent=visible.length+" visible";els.serviceCount.textContent=services.length;els.emptyServices.hidden=visible.length>0;els.services.innerHTML=visible.map(s=>\`<div class="service" data-id="\${esc(s.id)}"><div class="service-main"><div class="service-name"><i class="health \${s.status==="down"?"down":s.status==="degraded"?"degraded":""}" aria-hidden="true"></i>\${esc(s.name)}</div><span class="service-sub">\${esc(s.url)}</span></div><div class="service-state"><div class="service-meta"><span><b>\${s.latency?Math.round(s.latency)+" ms":"—"}</b></span><span><b>\${s.availability?Number(s.availability).toFixed(2)+"%":"—"}</b></span></div><div class="service-actions"><button class="mini-btn check" data-id="\${esc(s.id)}" title="Check service" aria-label="Check \${esc(s.name)}">↻</button><button class="mini-btn remove" data-id="\${esc(s.id)}" title="Remove service" aria-label="Remove \${esc(s.name)}">×</button></div></div></div>\`).join("")}
+function renderEvents(){els.emptyEvents.hidden=events.length>0;els.events.innerHTML=events.slice(0,20).map(e=>\`<div class="event"><strong>\${esc(e.title)}</strong><span>\${esc(e.detail)}</span><span>\${esc(e.time)}</span></div>\`).join("")}
+function renderIncidents(){els.incidentMeta.textContent=incidents.length+" open";els.incidentCount.textContent=incidents.length;els.emptyIncidents.hidden=incidents.length>0;els.incidents.innerHTML=incidents.map(i=>\`<div class="incident"><div><strong>\${esc(i.service)}</strong><span>\${esc(i.detail)}</span></div><time>\${esc(i.time)}</time></div>\`).join("")}
+function metrics(){const checked=services.filter(s=>typeof s.lastCheck==="number"),ok=checked.filter(s=>s.status==="up"),vals=history.map(Number).filter(Number.isFinite).sort((a,b)=>a-b);els.availability.textContent=checked.length?((ok.length/checked.length)*100).toFixed(2)+"%":"—";const p=vals.length?vals[Math.min(vals.length-1,Math.ceil(vals.length*.95)-1)]:null;els.p95.textContent=p?Math.round(p)+" ms":"—";els.chartP95.textContent=els.p95.textContent}
+function setOverall(){const down=services.some(s=>s.status==="down"),bad=services.some(s=>s.status==="degraded");els.statusCard.classList.toggle("down",down);els.statusCard.classList.toggle("warning",!down&&bad);els.statusText.textContent=down?"Degraded":bad?"Attention needed":"Operational"}
+function render(){renderServices();renderEvents();renderIncidents();metrics();setOverall();drawChart()}
+function openIncident(s,detail){if(!incidents.some(i=>i.id===s.id))incidents.unshift({id:s.id,service:s.name,detail,time:clock()})}
+function resolveIncident(id){const before=incidents.length;incidents=incidents.filter(i=>i.id!==id);if(before!==incidents.length){const s=services.find(x=>x.id===id);events.unshift({title:"Incident resolved",detail:s?.name||id,time:clock()})}}
+async function checkService(id){const s=services.find(x=>x.id===id);if(!s)return;if(s.mode==="demo"){s.status="up";s.latency=Math.max(12,Math.round(s.latency+(Math.random()-.5)*24));s.lastCheck=Date.now();events.unshift({title:"Demo check completed",detail:s.name+" · simulated healthy response",time:clock()});history.push(s.latency);history=history.slice(-120);save();render();return}
+const started=performance.now(),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);try{const res=await fetch(s.url,{method:"GET",cache:"no-store",signal:controller.signal,mode:"cors"}),latency=performance.now()-started;s.lastCheck=Date.now();s.latency=latency;s.lastStatus=res.status;s.status=res.ok?"up":"degraded";history.push(latency);history=history.slice(-120);events.unshift({title:res.ok?"Health check passed":"Health check returned an error",detail:s.name+" · HTTP "+res.status,time:clock()});res.ok?resolveIncident(s.id):openIncident(s,"HTTP "+res.status)}catch(err){s.lastCheck=Date.now();s.status="down";events.unshift({title:"Health check failed",detail:s.name+" · "+(err.name==="AbortError"?"request timed out":"CORS/network error"),time:clock()});openIncident(s,err.name==="AbortError"?"Request timed out":"Browser could not access endpoint")}finally{clearTimeout(timer);events=events.slice(0,30);save();render()}}
+async function checkAll(){els.updatedAt.textContent="Checking…";await Promise.all(services.map(s=>checkService(s.id)));els.updatedAt.textContent="Checked at "+clock();toast("Health checks completed")}
+function drawChart(){const c=els.canvas;if(!c)return;const dpr=Math.max(1,devicePixelRatio||1),r=c.getBoundingClientRect(),w=Math.max(1,r.width),h=Math.max(1,r.height);c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);const ctx=c.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);const pts=history.length?history.slice(-61):Array.from({length:61},(_,i)=>174+Math.sin(i*.31)*18+Math.sin(i*.79)*7),lo=Math.max(1,Math.min(...pts)-15),hi=Math.max(lo+1,Math.max(...pts)+15),x=i=>2+(w-4)*i/Math.max(1,pts.length-1),y=v=>h-15-(v-lo)/(hi-lo)*(h-30);ctx.clearRect(0,0,w,h);ctx.strokeStyle="rgba(148,163,184,.08)";for(let i=0;i<4;i++){const yy=15+(h-30)*i/3;ctx.beginPath();ctx.moveTo(2,yy);ctx.lineTo(w-2,yy);ctx.stroke()}ctx.beginPath();pts.forEach((v,i)=>i?ctx.lineTo(x(i),y(v)):ctx.moveTo(x(i),y(v)));ctx.strokeStyle="#78a7ff";ctx.lineWidth=2;ctx.stroke()}
+document.querySelector("#refreshBtn").addEventListener("click",checkAll);
+document.querySelector("#serviceFilter").addEventListener("input",renderServices);
+document.querySelector("#clearEventsBtn").addEventListener("click",()=>{events=[];save();renderEvents();toast("Event stream cleared")});
+document.querySelector("#clearDataBtn").addEventListener("click",()=>{services=DEMO_SERVICES.map(s=>({...s}));events=[];incidents=[];history=[];save();render();toast("Demo data restored")});
+document.querySelector("#services").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;if(b.classList.contains("check"))checkService(b.dataset.id);if(b.classList.contains("remove")){const s=services.find(x=>x.id===b.dataset.id);services=services.filter(x=>x.id!==b.dataset.id);incidents=incidents.filter(x=>x.id!==b.dataset.id);save();render();toast((s?.name||"Service")+" removed")}});
+const dialog=document.querySelector("#serviceDialog");document.querySelector("#addServiceBtn").addEventListener("click",()=>dialog.showModal());
+document.querySelector("#serviceForm").addEventListener("submit",e=>{e.preventDefault();const name=document.querySelector("#serviceName").value.trim(),url=document.querySelector("#serviceUrl").value.trim();try{const u=new URL(url);if(u.protocol!=="https:")throw new Error("HTTPS required")}catch{toast("Use a valid HTTPS endpoint");return}const id="custom-"+crypto.randomUUID();services.push({id,name,url,mode:"live",status:"unknown"});save();render();dialog.close();e.target.reset();toast("Endpoint added");checkService(id)});
+window.addEventListener("resize",drawChart,{passive:true});if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));render();setInterval(checkAll,60000);
