@@ -44,24 +44,41 @@ jobs:
         run: |
           set -e
           npm init -y >/dev/null 2>&1
-          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npm install --no-save playwright@1.55.0 @axe-core/playwright@4.13.0 >/dev/null 2>&1
+          npm audit --audit-level=high
           npx playwright install --with-deps chromium >/dev/null 2>&1
           python3 -m http.server 8080 >/tmp/monitoring-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
           sleep 2
           node --input-type=module <<'JS'
-          import { chromium } from "playwright";
+          import { chromium, devices } from "playwright";
+          import { AxeBuilder } from "@axe-core/playwright";
           const browser = await chromium.launch({headless:true});
           const page = await browser.newPage();
           const errors = [];
+          const urls = ["/", "/operator.html", "/service.html?id=missing", "/privacy.html", "/404.html"];
           page.on("pageerror", e => errors.push(page.url()+" :: "+String(e.stack||e)));
-          await page.goto("http://127.0.0.1:8080/", {waitUntil:"networkidle"});
-          if (!(await page.locator("h1").count())) throw new Error("Home heading missing");
-          await page.goto("http://127.0.0.1:8080/operator.html", {waitUntil:"networkidle"});
-          if (!(await page.locator("#loginForm").count())) throw new Error("Operator login missing");
-          await page.goto("http://127.0.0.1:8080/service.html?id=missing", {waitUntil:"networkidle"});
-          if (!(await page.locator("#name").count())) throw new Error("Service detail missing");
+          for (const path of urls) {
+            const response = await page.goto("http://127.0.0.1:8080"+path, {waitUntil:"networkidle"});
+            if (!response || !response.ok()) throw new Error("HTTP failure for "+path);
+            if (path === "/" && !(await page.locator("h1").count())) throw new Error("Home heading missing");
+            if (path === "/operator.html" && !(await page.locator("#loginForm").count())) throw new Error("Operator login missing");
+            if (path.startsWith("/service.html") && !(await page.locator("#name").count())) throw new Error("Service detail missing");
+            if (path === "/404.html" && !(await page.locator("h1").count())) throw new Error("404 heading missing");
+            const axe = await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa"]).analyze();
+            const serious = axe.violations.filter(v => v.impact === "serious" || v.impact === "critical");
+            if (serious.length) throw new Error("Accessibility violations on "+path+": "+JSON.stringify(serious));
+            const links = await page.locator("a[href]").evaluateAll(as => as.map(a => a.href).filter(h => h.startsWith(location.origin)));
+            for (const link of [...new Set(links)]) { const lr = await page.request.get(link); if (!lr.ok()) throw new Error("Broken link: "+link+" ("+lr.status()+")"); }
+          }
+          const mobile = await browser.newContext({...devices["Pixel 7"]});
+          const mobilePage = await mobile.newPage();
+          await mobilePage.goto("http://127.0.0.1:8080/", {waitUntil:"networkidle"});
+          if (!(await mobilePage.locator("h1").count())) throw new Error("Mobile home heading missing");
+          await mobilePage.goto("http://127.0.0.1:8080/operator.html", {waitUntil:"networkidle"});
+          if (!(await mobilePage.locator("#loginForm").count())) throw new Error("Mobile operator login missing");
+          await mobile.close();
           if (errors.length) throw new Error(errors.join("\n"));
           await browser.close();
           JS
