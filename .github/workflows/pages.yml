@@ -41,6 +41,10 @@ jobs:
           assert "serviceWorker.register" in js
           print("Static validation passed")
           PY
+          node --check app.js
+          python3 -m json.tool manifest.webmanifest >/dev/null
+          exit 0
+          PY
       - name: Run local server
         run: |
           set -e
