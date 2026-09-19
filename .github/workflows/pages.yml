@@ -23,37 +23,54 @@ jobs:
       - name: Validate required files
         run: |
           set -e
-          test -s index.html
-          test -s styles.css
-          test -s app.js
-          test -s manifest.webmanifest
-          test -s sw.js
-          test -s service.html
-          test -s service-detail.js
-          test -s privacy.html
-          test -s 404.html
+          for f in index.html styles.css app.js manifest.webmanifest sw.js service.html service-detail.js privacy.html 404.html operator.html operator.js; do test -s "$f"; done
           python3 - <<'PY'
           from pathlib import Path
           html=Path("index.html").read_text()
           js=Path("app.js").read_text()
           assert 'href="styles.css"' in html
           assert 'src="app.js"' in html
-          assert "function checkAll" in js
-          assert "serviceWorker.register" in js
+          assert "server-side" in html.lower()
+          assert "monitor-api-final" in js
+          assert "setInterval(refresh,60000)" in js
           print("Static validation passed")
           PY
           node --check app.js
           node --check service-detail.js
+          node --check operator.js
           python3 -m json.tool manifest.webmanifest >/dev/null
-          exit 0
-      - name: Run local server
+      - name: Browser smoke test
         run: |
           set -e
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
           python3 -m http.server 8080 >/tmp/monitoring-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
           sleep 2
+          node --input-type=module <<'JS'
+          import { chromium } from "playwright";
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage();
+          const errors = [];
+          page.on("pageerror", e => errors.push(String(e)));
+          await page.goto("http://127.0.0.1:8080/", {waitUntil:"networkidle"});
+          if (!(await page.locator("h1").count())) throw new Error("Home heading missing");
+          await page.goto("http://127.0.0.1:8080/operator.html", {waitUntil:"networkidle"});
+          if (!(await page.locator("#loginForm").count())) throw new Error("Operator login missing");
+          await page.goto("http://127.0.0.1:8080/service.html?id=missing", {waitUntil:"networkidle"});
+          if (!(await page.locator("#name").count())) throw new Error("Service detail missing");
+          if (errors.length) throw new Error(errors.join("\n"));
+          await browser.close();
+          JS
+      - name: Local HTTP checks
+        run: |
+          set -e
           curl --fail --silent --show-error http://127.0.0.1:8080/ >/tmp/index.out
           curl --fail --silent --show-error http://127.0.0.1:8080/manifest.webmanifest >/dev/null
           curl --fail --silent --show-error http://127.0.0.1:8080/service.html >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:8080/operator.html >/dev/null
           curl --fail --silent --show-error http://127.0.0.1:8080/privacy.html >/dev/null
           curl --fail --silent --show-error http://127.0.0.1:8080/404.html >/dev/null
           grep -q "SYSTEM OBSERVABILITY" /tmp/index.out
@@ -78,3 +95,27 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+  post-deploy-verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Browser verify production
+        run: |
+          set -e
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          node --input-type=module <<'JS'
+          import { chromium } from "playwright";
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage();
+          const errors = [];
+          page.on("pageerror", e => errors.push(String(e)));
+          for (const path of ["/MONITORING/","/MONITORING/operator.html","/MONITORING/service.html?id=530282b1-8af9-4896-8c17-e8bd1ceaf6c4","/MONITORING/privacy.html"]) {
+            const response = await page.goto("https://kolkata-janta-party.github.io"+path, {waitUntil:"networkidle"});
+            if (!response || !response.ok()) throw new Error("HTTP failure for "+path);
+          }
+          if (errors.length) throw new Error(errors.join("\n"));
+          await browser.close();
+          JS
