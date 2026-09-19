@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://kolkata-janta-party.github.io/MONITORING/sitemap.xml
