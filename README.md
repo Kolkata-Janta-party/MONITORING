@@ -99,3 +99,5 @@ The monitoring backend is deployed separately to Supabase and scheduled independ
 
 ## Scope
 This project is for technical/system observability only. It does not perform individual profiling, political persuasion, voter targeting, or person-level political monitoring.
+
+Backend scheduler and retention jobs are managed in Supabase and are verified independently from the static Pages deployment.
