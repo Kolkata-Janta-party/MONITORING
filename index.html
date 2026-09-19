@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b1020">
-  <meta name="description" content="MONITORING — a lightweight service observability dashboard.">
+  <meta name="theme-color" content="#080c18">
+  <meta name="description" content="MONITORING — a lightweight, privacy-conscious service observability dashboard.">
+  <meta name="robots" content="index,follow">
+  <link rel="canonical" href="https://kolkata-janta-party.github.io/MONITORING/">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <title>MONITORING — Observability Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,22 +17,27 @@
 <body>
   <div class="shell">
     <header class="topbar">
-      <a class="brand" href="./" aria-label="MONITORING home"><span class="brand-mark">M</span><span>MONITORING</span></a>
+      <a class="brand" href="./" aria-label="MONITORING home"><span class="brand-mark" aria-hidden="true">M</span><span>MONITORING</span></a>
+      <nav class="topbar-nav" aria-label="Dashboard sections">
+        <a href="#services-panel">Services</a>
+        <a href="#events-panel">Activity</a>
+        <a href="#performance">Performance</a>
+      </nav>
       <div class="topbar-actions">
-        <span class="live-pill"><i></i> LIVE DEMO</span>
+        <span class="live-pill"><i aria-hidden="true"></i> LIVE DEMO</span>
         <button id="refreshBtn" class="icon-btn" type="button" aria-label="Refresh dashboard" title="Refresh dashboard">↻</button>
       </div>
     </header>
 
     <main>
-      <section class="hero">
+      <section class="hero" aria-labelledby="hero-title">
         <div>
           <p class="eyebrow">SYSTEM OBSERVABILITY</p>
-          <h1>Know what’s happening.<br><span>Before users do.</span></h1>
+          <h1 id="hero-title">Know what’s happening.<br><span>Before users do.</span></h1>
           <p class="hero-copy">A focused operational view for service health, latency, deployments, and incidents.</p>
         </div>
-        <div class="status-card">
-          <span class="status-dot"></span>
+        <div class="status-card" role="status" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
           <div><strong>Operational</strong><small id="updatedAt">Updated just now</small></div>
         </div>
       </section>
@@ -42,26 +50,27 @@
       </section>
 
       <section class="grid">
-        <article class="panel services-panel">
+        <article class="panel services-panel" id="services-panel">
           <div class="panel-head"><div><p class="eyebrow">SERVICE HEALTH</p><h2>All systems</h2></div><span class="panel-meta">6 / 6 visible</span></div>
-          <div id="services" class="service-list"></div>
+          <div id="services" class="service-list" aria-live="polite"></div>
         </article>
 
-        <article class="panel events-panel">
+        <article class="panel events-panel" id="events-panel">
           <div class="panel-head"><div><p class="eyebrow">EVENT STREAM</p><h2>Recent activity</h2></div><span class="panel-meta">LIVE</span></div>
-          <div id="events" class="events-list"></div>
+          <div id="events" class="events-list" aria-live="polite"></div>
         </article>
       </section>
 
-      <section class="panel chart-panel">
-        <div class="panel-head"><div><p class="eyebrow">PERFORMANCE</p><h2>API latency</h2></div><span class="chart-value">p95 <strong>182ms</strong></span></div>
-        <div class="chart-wrap"><canvas id="latencyChart" aria-label="API latency chart" role="img"></canvas></div>
-        <div class="chart-axis"><span>60 min ago</span><span>30 min</span><span>Now</span></div>
+      <section class="panel chart-panel" id="performance" aria-labelledby="performance-title">
+        <div class="panel-head"><div><p class="eyebrow">PERFORMANCE</p><h2 id="performance-title">API latency</h2></div><span class="chart-value">p95 <strong>182ms</strong></span></div>
+        <div class="chart-wrap"><canvas id="latencyChart" aria-label="API latency over the last 60 minutes" role="img"></canvas></div>
+        <div class="chart-axis" aria-hidden="true"><span>60 min ago</span><span>30 min</span><span>Now</span></div>
       </section>
     </main>
 
     <footer><span>MONITORING</span><span>Static demo · no user tracking</span></footer>
   </div>
-  <script src="app.js"></script>
+  <noscript><div class="noscript">JavaScript is required for live demo data and the latency chart.</div></noscript>
+  <script src="app.js" defer></script>
 </body>
 </html>
